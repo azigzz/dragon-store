@@ -1,0 +1,27 @@
+{
+  "prefix": "!",
+  "adminRoleId": "1515799363149103142",
+  "categories": {
+    "cartOpen": "1515799366760141033",
+    "closed": "1515813300862980268",
+    "ticketOpen": "1515799366760141033"
+  },
+  "ticketPanel": {
+    "channelId": "1515799364574904531",
+    "title": "🎫 Suporte",
+    "description": "Precisa de ajuda? Clique no botão abaixo para abrir um ticket privado com a equipe.",
+    "buttonLabel": "Criar ticket",
+    "buttonEmoji": "🎫",
+    "embedColor": "#2b2d31"
+  },
+  "messages": {
+    "cartWelcome": "Bem-vindo ao seu carrinho! Você já selecionou um produto. Pode adicionar mais produtos ou chamar um administrador.",
+    "adminCall": "Um cliente solicitou atendimento neste carrinho/ticket.",
+    "purchaseThanks": "Obrigado pela compra, qualquer dúvida abra ticket. ID da compra: **{id}**. Volte sempre!",
+    "ticketWelcome": "Explique seu problema ou dúvida aqui. Um administrador irá te atender."
+  },
+  "settings": {
+    "finalizeCartOnlyAdmins": true,
+    "deleteTicketAfterCloseSeconds": 5
+  }
+}

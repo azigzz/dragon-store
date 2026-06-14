@@ -1,0 +1,17 @@
+{
+  "name": "discord-sales-bot-config-discord",
+  "version": "2.0.0",
+  "description": "Bot de vendas Discord com configurador dentro do Discord.",
+  "main": "src/index.js",
+  "scripts": {
+    "deploy": "node deploy-commands.js",
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.23.1",
+    "dotenv": "^16.4.7"
+  },
+  "engines": {
+    "node": "20.x"
+  }
+}

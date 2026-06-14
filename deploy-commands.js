@@ -20,6 +20,14 @@ const commands = [
     .setDescription("Envia o painel de ticket no canal configurado.")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
   new SlashCommandBuilder()
+    .setName("setup-atendimento")
+    .setDescription("Cria/atualiza o painel ON/OFF dos ADMs e recebedores Pix.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
+    .setName("configpix")
+    .setDescription("Configura seu nome, chave Pix e QR Code para assumir compras.")
+    .setDefaultMemberPermissions(PermissionFlagsBits.Administrator),
+  new SlashCommandBuilder()
     .setName("status-loja")
     .setDescription("Mostra a configuração atual da loja.")
     .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)

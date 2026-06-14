@@ -7,6 +7,7 @@ Bot em Node.js com `discord.js v14` para loja digital com painel configuravel pe
 - Painel de loja com embed, banner, thumbnail, cor e menu de produtos.
 - Configurador por `/configds` ou `!configds`.
 - Produto com nome, preco, descricao, estoque e foto individual.
+- Upload de imagem pelo Discord, sem precisar colar URL manualmente.
 - Edicao de produto existente sem precisar remover e recriar.
 - Carrinho privado por cliente com ID aleatorio de 7 digitos.
 - Snapshot do produto dentro do pedido, preservando nome/preco mesmo se o produto for editado depois.
@@ -88,10 +89,14 @@ Se `/configpix` nao aparecer ou disser que falta permissao, rode `npm run deploy
 2. Configure titulo, descricao, banner, thumbnail, cor e canal.
 3. Clique em **Adicionar produto** para cadastrar nome, preco, descricao, estoque e foto.
 4. Clique em **Editar produto** para trocar nome, preco, estoque, foto ou brindes.
-5. Clique em **Adicionar caixa surpresa** para cadastrar uma caixa de brindes digitais.
-6. Use **Preview** para conferir.
-7. Use **Publicar painel** para publicar ou reutilizar a mensagem salva quando possivel.
-8. Use **Atualizar publicado** para editar manualmente o painel que ja esta no chat.
+5. Use **Enviar imagem do painel** para mandar banner/thumbnail como anexo no Discord.
+6. Use **Enviar foto de produto** para escolher um produto e mandar a foto como anexo.
+7. Clique em **Adicionar caixa surpresa** para cadastrar uma caixa de brindes digitais.
+8. Use **Preview** para conferir.
+9. Use **Publicar painel** para publicar ou reutilizar a mensagem salva quando possivel.
+10. Use **Atualizar publicado** para editar manualmente o painel que ja esta no chat.
+
+Ao enviar imagem por arquivo, o bot salva uma copia da imagem em uma mensagem dele no Discord e grava a URL dessa copia no JSON.
 
 ## Fluxo de atendimento
 

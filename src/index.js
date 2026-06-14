@@ -5,6 +5,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const {
   ActionRowBuilder,
+  AttachmentBuilder,
   ButtonBuilder,
   ButtonStyle,
   ChannelType,
@@ -41,6 +42,9 @@ const client = new Client({
 });
 
 const sessions = new Map();
+const imageUploads = new Map();
+const IMAGE_UPLOAD_TTL_MS = 3 * 60 * 1000;
+const MAX_SAVED_IMAGE_BYTES = 8 * 1024 * 1024;
 
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, "utf8")); }
@@ -131,6 +135,28 @@ function validUrl(v) {
     const u = new URL(raw);
     return ["http:", "https:"].includes(u.protocol);
   } catch { return false; }
+}
+function imageUploadKey(guildId, channelId, userId) {
+  return `${guildId}:${channelId}:${userId}`;
+}
+function isImageAttachment(attachment) {
+  const type = String(attachment.contentType || "");
+  const name = String(attachment.name || attachment.url || "");
+  return type.startsWith("image/") || /\.(png|jpe?g|webp|gif)$/i.test(name);
+}
+function savedImageName(attachment) {
+  const original = String(attachment.name || "imagem.png");
+  const extension = original.match(/\.(png|jpe?g|webp|gif)$/i)?.[0]?.toLowerCase() || ".png";
+  return `dragon-store-${random7()}${extension}`;
+}
+function imageUploadTargetLabel(pending, panel) {
+  if (pending.target === "panelImage") return "banner do painel";
+  if (pending.target === "panelThumb") return "thumbnail do painel";
+  if (pending.target === "product") {
+    const p = product(panel, pending.productId);
+    return p ? `foto do produto ${p.name}` : "foto do produto";
+  }
+  return "imagem";
 }
 function safeName(text) {
   return String(text || "usuario")
@@ -802,7 +828,8 @@ ${lines}
 
 **Publicar painel** publica ou reutiliza a mensagem salva quando possível.
 **Atualizar publicado** edita manualmente o painel que já está no chat.
-Use **Editar produto** para trocar nome, preço, estoque, foto e brindes.`);
+Use **Editar produto** para trocar nome, preço, estoque, foto e brindes.
+Use os botões de **Enviar imagem** para mandar arquivo direto no Discord, sem colar link.`);
 }
 function configRows(sessionId) {
   return [
@@ -825,6 +852,10 @@ function configRows(sessionId) {
       new ButtonBuilder().setCustomId(`cfg:${sessionId}:edit`).setLabel("Editar produto").setEmoji("✏️").setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`cfg:${sessionId}:reset`).setLabel("Resetar exemplo").setEmoji("♻️").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder().setCustomId(`cfg:${sessionId}:close`).setLabel("Fechar config").setEmoji("🔒").setStyle(ButtonStyle.Danger)
+    ),
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`cfg:${sessionId}:uploadpanel`).setLabel("Enviar imagem do painel").setEmoji("🖼️").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`cfg:${sessionId}:uploadproduct`).setLabel("Enviar foto de produto").setEmoji("📸").setStyle(ButtonStyle.Primary)
     )
   ];
 }
@@ -999,6 +1030,104 @@ async function publishPanelMessage(interaction, panel, guildId) {
   savePanel(guildId, panel);
   return { ok: true, action: "published", channelId: ch.id, messageId: sent.id };
 }
+async function updatePublishedPanel(guild, panel) {
+  if (!panel.publishedChannelId || !panel.publishedMessageId) return false;
+
+  try {
+    const ch = await guild.channels.fetch(panel.publishedChannelId);
+    if (!ch || !ch.isTextBased()) return false;
+    const msg = await ch.messages.fetch(panel.publishedMessageId);
+    await msg.edit(saleMessage(panel));
+    return true;
+  } catch (error) {
+    console.log("Não consegui atualizar painel publicado:", error.message);
+    return false;
+  }
+}
+function panelImageUploadMenu(sessionId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`uploadpanel:${sessionId}`)
+      .setPlaceholder("Onde salvar a imagem?")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions([
+        { label: "Banner do painel", description: "Imagem grande do embed da loja", value: "panelImage" },
+        { label: "Thumbnail do painel", description: "Imagem pequena no canto do embed", value: "panelThumb" }
+      ])
+  );
+}
+function productImageUploadMenu(sessionId, panel) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`uploadproduct:${sessionId}`)
+      .setPlaceholder("Produto que vai receber a foto")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(panel.products.slice(0, 25).map(p => ({
+        label: `${productIcon(p)} ${String(p.name).slice(0, 95)}`,
+        description: productOptionDescription(p),
+        value: p.id
+      })))
+  );
+}
+async function saveAttachmentAsDiscordImage(channel, attachment, label) {
+  if (attachment.size > MAX_SAVED_IMAGE_BYTES) {
+    return {
+      url: attachment.url,
+      copied: false,
+      note: "O arquivo era grande demais para eu reenviar; salvei a URL do anexo original."
+    };
+  }
+
+  try {
+    const response = await fetch(attachment.url);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const contentType = response.headers.get("content-type") || attachment.contentType || "image/png";
+    if (!contentType.startsWith("image/")) throw new Error("arquivo baixado não é imagem");
+
+    const bytes = Buffer.from(await response.arrayBuffer());
+    const file = new AttachmentBuilder(bytes, { name: savedImageName(attachment) });
+    const saved = await channel.send({ content: `Imagem salva para **${label}**.`, files: [file] });
+    const savedAttachment = saved.attachments.first();
+
+    return {
+      url: savedAttachment?.url || attachment.url,
+      copied: Boolean(savedAttachment),
+      note: savedAttachment ? "Copiei a imagem para uma mensagem do bot e salvei essa URL." : "Salvei a URL do anexo original."
+    };
+  } catch (error) {
+    console.log("Não consegui copiar imagem enviada:", error.message);
+    return {
+      url: attachment.url,
+      copied: false,
+      note: "Não consegui copiar a imagem, então salvei a URL do anexo original."
+    };
+  }
+}
+async function queueImageUpload(interaction, sessionId, pending) {
+  const key = imageUploadKey(interaction.guildId, interaction.channelId, interaction.user.id);
+  const uploadState = {
+    ...pending,
+    sessionId,
+    guildId: interaction.guildId,
+    channelId: interaction.channelId,
+    userId: interaction.user.id,
+    expiresAt: Date.now() + IMAGE_UPLOAD_TTL_MS
+  };
+  imageUploads.set(key, uploadState);
+  setTimeout(() => {
+    if (imageUploads.get(key)?.expiresAt === uploadState.expiresAt) imageUploads.delete(key);
+  }, IMAGE_UPLOAD_TTL_MS + 1000);
+
+  const panel = getPanel(interaction.guildId);
+  const label = imageUploadTargetLabel(pending, panel);
+  return interaction.reply({
+    content: `Beleza. Agora envie a imagem como **anexo neste canal** em até 3 minutos. Vou salvar como ${label}.`,
+    ephemeral: true
+  });
+}
 async function handleConfigButton(interaction) {
   const [, sessionId, action] = interaction.customId.split(":");
   const s = await sessionOrReply(interaction, sessionId);
@@ -1006,6 +1135,13 @@ async function handleConfigButton(interaction) {
   const panel = getPanel(s.guildId);
   if (["title", "desc", "image", "color", "channel", "add", "mystery"].includes(action)) return interaction.showModal(editModal(sessionId, action, panel));
   if (action === "preview") return interaction.reply({ content: "Preview:", ...saleMessage(panel), ephemeral: true });
+  if (action === "uploadpanel") {
+    return interaction.reply({ content: "Escolha onde a imagem do painel vai entrar:", components: [panelImageUploadMenu(sessionId)], ephemeral: true });
+  }
+  if (action === "uploadproduct") {
+    if (!panel.products.length) return interaction.reply({ content: "Cadastre um produto antes de enviar foto.", ephemeral: true });
+    return interaction.reply({ content: "Escolha o produto que vai receber a foto:", components: [productImageUploadMenu(sessionId, panel)], ephemeral: true });
+  }
   if (action === "publish") {
     const result = await publishPanelMessage(interaction, panel, s.guildId);
     if (!result.ok) return interaction.reply({ content: result.message, ephemeral: true });
@@ -1152,6 +1288,24 @@ async function handleEditProduct(interaction) {
   if (!p) return interaction.reply({ content: "Produto não encontrado. Reabra o configurador e tente de novo.", ephemeral: true });
 
   return interaction.showModal(productEditModal(sessionId, p));
+}
+async function handlePanelImageUploadTarget(interaction) {
+  const [, sessionId] = interaction.customId.split(":");
+  const s = await sessionOrReply(interaction, sessionId);
+  if (!s) return;
+
+  return queueImageUpload(interaction, sessionId, { target: interaction.values[0] });
+}
+async function handleProductImageUploadTarget(interaction) {
+  const [, sessionId] = interaction.customId.split(":");
+  const s = await sessionOrReply(interaction, sessionId);
+  if (!s) return;
+
+  const panel = getPanel(s.guildId);
+  const p = product(panel, interaction.values[0]);
+  if (!p) return interaction.reply({ content: "Produto não encontrado. Reabra o configurador e tente de novo.", ephemeral: true });
+
+  return queueImageUpload(interaction, sessionId, { target: "product", productId: p.id });
 }
 
 async function privateChannel(guild, user, name, parent) {
@@ -1396,11 +1550,75 @@ async function closeTicket(interaction, id) {
   await interaction.reply({ content: `Ticket fechado. Apagando em ${seconds}s.` });
   setTimeout(() => interaction.channel.delete(`Ticket ${id} fechado`).catch(() => null), Math.max(1, seconds) * 1000);
 }
+async function handlePendingImageUpload(message) {
+  const key = imageUploadKey(message.guild.id, message.channel.id, message.author.id);
+  const pending = imageUploads.get(key);
+  if (!pending) return false;
+
+  if (Date.now() > pending.expiresAt) {
+    imageUploads.delete(key);
+    await message.reply("O tempo para enviar a imagem expirou. Clique no botão de envio de imagem de novo.").catch(() => null);
+    return false;
+  }
+
+  if (!isAdmin(message.member)) {
+    imageUploads.delete(key);
+    await message.reply("Só ADM pode salvar imagem no painel da loja.").catch(() => null);
+    return true;
+  }
+
+  const attachment = message.attachments.find(isImageAttachment);
+  if (!attachment) {
+    if (message.attachments.size) {
+      await message.reply("Recebi um anexo, mas ele não parece ser imagem. Envie PNG, JPG, WEBP ou GIF.").catch(() => null);
+      return true;
+    }
+    return false;
+  }
+
+  const s = sessions.get(pending.sessionId);
+  if (!s) {
+    imageUploads.delete(key);
+    await message.reply("A sessão do configurador expirou. Abra `/configds` de novo.").catch(() => null);
+    return true;
+  }
+
+  const panel = getPanel(s.guildId);
+  const label = imageUploadTargetLabel(pending, panel);
+  const savedImage = await saveAttachmentAsDiscordImage(message.channel, attachment, label);
+
+  if (pending.target === "panelImage") {
+    panel.imageUrl = savedImage.url;
+  } else if (pending.target === "panelThumb") {
+    panel.thumbnailUrl = savedImage.url;
+  } else if (pending.target === "product") {
+    const p = product(panel, pending.productId);
+    if (!p) {
+      imageUploads.delete(key);
+      await message.reply("Não achei mais esse produto. Reabra o configurador e tente de novo.").catch(() => null);
+      return true;
+    }
+    p.imageUrl = savedImage.url;
+  }
+
+  savePanel(s.guildId, panel);
+  imageUploads.delete(key);
+  await refreshConfig(pending.sessionId);
+
+  const publishedUpdated = ["panelImage", "panelThumb"].includes(pending.target)
+    ? await updatePublishedPanel(message.guild, panel)
+    : false;
+  const publishedText = publishedUpdated ? "\nPainel publicado atualizado também." : "";
+
+  await message.reply(`Imagem salva como **${label}**.\n${savedImage.note}${publishedText}`).catch(() => null);
+  return true;
+}
 
 client.once("ready", () => console.log(`Bot online como ${client.user.tag}`));
 
 client.on("messageCreate", async message => {
   if (message.author.bot || !message.guild) return;
+  if (await handlePendingImageUpload(message)) return;
   const content = message.content.trim().toLowerCase();
 
   if (content === `${config.prefix || "!"}configds`) {
@@ -1464,6 +1682,8 @@ client.on("interactionCreate", async interaction => {
     if (interaction.isStringSelectMenu()) {
       if (interaction.customId.startsWith("remove:")) return handleRemove(interaction);
       if (interaction.customId.startsWith("edit:")) return handleEditProduct(interaction);
+      if (interaction.customId.startsWith("uploadpanel:")) return handlePanelImageUploadTarget(interaction);
+      if (interaction.customId.startsWith("uploadproduct:")) return handleProductImageUploadTarget(interaction);
       if (interaction.customId.startsWith("buy:")) return openCart(interaction);
       if (interaction.customId.startsWith("cartadd:")) return addCart(interaction);
     }

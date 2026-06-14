@@ -387,7 +387,7 @@ function staffChoiceRows(orderId, assigned = false) {
 }
 async function sendStaffChoiceMessage(channel, order, guildId) {
   const online = onlineStaffProfiles(guildId);
-  const panel = getPanel(guildId);
+  const panel = getOrderPanel(order, guildId);
 
   if (online.length === 1 && !order.assignedAdminId) {
     const profile = online[0];
@@ -449,7 +449,7 @@ async function assumeOrder(interaction, id) {
   db.orders[id] = order;
   writeOrders(db);
 
-  const panel = getPanel(interaction.guildId);
+  const panel = getOrderPanel(order, interaction.guildId);
 
   await interaction.channel.send({
     content: `✅ Compra #${id} assumida por **${order.assignedAdminName}** (<@${interaction.user.id}>).`,
@@ -482,7 +482,7 @@ async function resendPix(interaction, id) {
     return interaction.reply({ content: "O ADM responsável não tem Pix configurado mais.", ephemeral: true });
   }
 
-  const panel = getPanel(interaction.guildId);
+  const panel = getOrderPanel(order, interaction.guildId);
   await interaction.channel.send({ embeds: [buildPixEmbed(order, panel, profile)] });
   await sendSafeDM(order.userId, { embeds: [buildPixEmbed(order, panel, profile)] });
 
@@ -547,10 +547,11 @@ async function handlePixModal(interaction) {
 
   return interaction.reply({ content: "Pix salvo. Agora clique em **Ficar ON** no painel quando estiver disponível.", ephemeral: true });
 }
-function defaultPanel(guildId) {
+function defaultPanel(guildId, scopeId = "default") {
   return {
-    id: "main",
+    id: scopeId === "default" ? "main" : `panel_${scopeId}`,
     guildId,
+    scopeId,
     channelId: "",
     publishedChannelId: "",
     publishedMessageId: "",
@@ -560,6 +561,7 @@ function defaultPanel(guildId) {
     color: "#9b00ff",
     imageUrl: "",
     thumbnailUrl: "",
+    quickOrder: defaultQuickOrder(),
     description: `🛒 **Loja digital de packs prontos**\n\nEscolha o produto no menu abaixo e o bot abre um carrinho privado para atendimento.\n\n📦 **O que você encontra**\n\n🎥 **Packs de edição e cortes**\nConteúdo pronto para usar em reels, criativos e páginas de venda.\n\n💎 **Packs lifestyle premium**\nVídeos com estética de luxo, viagens, carros e rotina de alto padrão.\n\n🎁 **Caixa surpresa digital**\nBrindes digitais sorteados somente após a compra ser finalizada pelo ADM.\n\n✅ Atendimento manual\n✅ Pagamento via Pix do atendente\n✅ Entrega combinada no carrinho`,
     products: [
       { id: "p" + random7(), name: "250 Cortes de Filmes e Séries aleatórios", price: "R$ 1,00", description: "Conteúdo pronto para postar e reaproveitar", stock: "infinito" },
@@ -584,20 +586,173 @@ function defaultPanel(guildId) {
     updatedAt: new Date().toISOString()
   };
 }
-function getPanel(guildId) {
+const PRODUCT_PRESETS = {
+  tft: {
+    label: "TFT Sets",
+    title: "Frosted TFT",
+    color: "#22c7ff",
+    description:
+      "🛒 **Sets TFT prontos para compra**\n\nSelecione um set no menu abaixo para abrir um carrinho privado com a equipe.\n\nDepois informe seu nick e o set desejado no carrinho para agilizar o atendimento.",
+    productDescription: "Set TFT com entrega combinada no carrinho.",
+    items: [
+      ["Set Party Balloons", "R$ 18,90"],
+      ["Set Lovesick", "R$ 11,80"],
+      ["Set Spooky Brew", "R$ 9,40"],
+      ["Set Pumpkin Slice", "R$ 8,90"],
+      ["Set Gothic Bouquet", "R$ 8,40"],
+      ["Set Dragon Puppet", "R$ 3,80"],
+      ["Set Lovely Heart", "R$ 3,40"],
+      ["Set Cherry Blossom", "R$ 4,90"],
+      ["Set Icecream Mix", "R$ 4,90"],
+      ["Set Bleak Ink", "R$ 6,90"],
+      ["Set Batwing", "R$ 4,40"],
+      ["Set Classic", "R$ 5,90"],
+      ["Set Psycho", "R$ 4,50"],
+      ["Set Dark Bone", "R$ 4,50"],
+      ["Set Hollow Scythe", "R$ 2,00"],
+      ["Set Bleeding Heart", "R$ 2,00"],
+      ["Qualquer Hunter (2 por 1)", "R$ 2,00"],
+      ["Sets da descrição", "R$ 2,00"],
+      ["Set Devilish", "R$ 9,40"],
+      ["Set Lion Dance", "R$ 3,50"],
+      ["Set Devilborn", "R$ 3,90"],
+      ["Set Pegasus Blade", "R$ 3,48"]
+    ]
+  },
+  steam: {
+    label: "Steam Keys",
+    title: "Steam Keys",
+    color: "#5865f2",
+    description:
+      "🎮 **Steam Keys digitais**\n\nEscolha uma opção no menu abaixo para abrir um carrinho privado. O atendimento e a entrega são feitos pela equipe.",
+    productDescription: "Steam key digital com entrega manual no carrinho.",
+    items: [
+      ["Steam Key Black Premium", "R$ 3,99"],
+      ["Steam Key Ruby", "R$ 2,69"],
+      ["3x Steam Keys Aleatórias", "R$ 2,00"]
+    ]
+  },
+  smm: {
+    label: "SMM",
+    title: "Serviços SMM",
+    color: "#19c37d",
+    description:
+      "📈 **Serviços para redes sociais**\n\nSelecione o serviço desejado no menu abaixo para abrir um carrinho privado com a equipe.",
+    productDescription: "Serviço SMM com detalhes combinados no carrinho.",
+    items: [
+      ["1.000 Seguidores (Sem Garantia)", "R$ 2,00"],
+      ["5.000 Seguidores (Sem Garantia)", "R$ 7,50"],
+      ["10.000 Seguidores (Sem Garantia)", "R$ 14,00"],
+      ["1.000 Curtidas Mundiais", "R$ 2,00"],
+      ["5.000 Curtidas Mundiais", "R$ 3,00"],
+      ["10.000 Curtidas Mundiais", "R$ 5,50"],
+      ["1.000 Curtidas Brasileiras", "R$ 4,00"],
+      ["5.000 Curtidas Brasileiras", "R$ 18,00"],
+      ["10.000 Curtidas Brasileiras", "R$ 35,00"],
+      ["1.000 Seguidores Mundiais (Garantia 30 Dias)", "R$ 4,90"],
+      ["5.000 Seguidores Mundiais (Garantia 30 Dias)", "R$ 22,50"],
+      ["10.000 Seguidores Mundiais (Garantia 30 Dias)", "R$ 43,90"],
+      ["1.000 Seguidores Brasileiros", "R$ 8,90"],
+      ["10.000 Visualizações", "R$ 2,00"],
+      ["50.000 Visualizações", "R$ 2,50"],
+      ["100.000 Visualizações", "R$ 4,00"]
+    ]
+  }
+};
+function defaultQuickOrder() {
+  return {
+    title: "Compre aqui",
+    description:
+      "🛒 **ESCOLHA UMA DAS OPÇÕES PARA SER ATENDIDO!**\n\n• **Comprar:** Compre sets e robux com o suporte da nossa equipe.\n• **Automático:** Compre sets e receba rápido via sistema automático.\n• **Combos:** Compre x-all, combos e sets via sistema automático.",
+    buttonLabel: "Comprar",
+    question1: "Nick no roblox",
+    question2: "Nome do Set que você deseja comprar",
+    publishedChannelId: "",
+    publishedMessageId: ""
+  };
+}
+function productsFromPreset(preset) {
+  return preset.items.map(([name, price]) => ({
+    id: "p" + random7(),
+    name,
+    price,
+    description: preset.productDescription,
+    stock: "infinito",
+    imageUrl: ""
+  }));
+}
+function applyProductPreset(panel, presetKey) {
+  const preset = PRODUCT_PRESETS[presetKey];
+  if (!preset) return false;
+
+  panel.title = preset.title;
+  panel.color = preset.color;
+  panel.description = preset.description;
+  panel.products = productsFromPreset(preset);
+  const oldQuick = quickOrderConfig(panel);
+  panel.quickOrder = {
+    ...oldQuick,
+    title: presetKey === "tft" ? "Compre aqui" : oldQuick.title,
+    description: presetKey === "tft"
+      ? "🛒 **ESCOLHA UMA DAS OPÇÕES PARA SER ATENDIDO!**\n\n• **Comprar:** Compre sets e robux com o suporte da nossa equipe.\n• **Automático:** Compre sets e receba rápido via sistema automático.\n• **Combos:** Compre x-all, combos e sets via sistema automático."
+      : oldQuick.description,
+    buttonLabel: oldQuick.buttonLabel,
+    question1: oldQuick.question1,
+    question2: oldQuick.question2
+  };
+
+  return true;
+}
+function ensurePanelStore(store, guildId) {
+  if (!store.guilds[guildId]) store.guilds[guildId] = {};
+  const guildStore = store.guilds[guildId];
+
+  if (!guildStore.panels) guildStore.panels = {};
+
+  if (guildStore.panel && !Object.keys(guildStore.panels).length) {
+    const legacyScopeId = guildStore.panel.scopeId || guildStore.panel.configMessageChannelId || "default";
+    guildStore.panel.scopeId = legacyScopeId;
+    if (!guildStore.panel.id) guildStore.panel.id = legacyScopeId === "default" ? "main" : `panel_${legacyScopeId}`;
+    guildStore.panels[legacyScopeId] = guildStore.panel;
+  }
+
+  return guildStore;
+}
+function getPanel(guildId, scopeId = "default") {
   const store = readPanels();
-  if (!store.guilds[guildId]) {
-    store.guilds[guildId] = { panel: defaultPanel(guildId) };
+  const guildStore = ensurePanelStore(store, guildId);
+  const key = String(scopeId || "default");
+
+  if (!guildStore.panels[key]) {
+    guildStore.panels[key] = defaultPanel(guildId, key);
     writePanels(store);
   }
-  return store.guilds[guildId].panel;
+
+  return guildStore.panels[key];
 }
-function savePanel(guildId, panel) {
+function savePanel(guildId, panel, scopeId = null) {
   const store = readPanels();
-  if (!store.guilds[guildId]) store.guilds[guildId] = {};
+  const guildStore = ensurePanelStore(store, guildId);
+  const key = String(scopeId || panel.scopeId || panel.configMessageChannelId || "default");
+  panel.scopeId = key;
+  if (!panel.id) panel.id = key === "default" ? "main" : `panel_${key}`;
   panel.updatedAt = new Date().toISOString();
-  store.guilds[guildId].panel = panel;
+  guildStore.panels[key] = panel;
+  if (key === "default") guildStore.panel = panel;
   writePanels(store);
+}
+function getPanelById(guildId, panelId) {
+  const store = readPanels();
+  const guildStore = ensurePanelStore(store, guildId);
+  const panels = Object.values(guildStore.panels || {});
+  const found = panels.find(panel => panel.id === panelId);
+
+  if (!found && guildStore.panel?.id === panelId) return guildStore.panel;
+  return found || null;
+}
+function getOrderPanel(order, guildId) {
+  return (order?.panelId && getPanelById(guildId, order.panelId)) ||
+    getPanel(guildId, order?.panelScopeId || order?.scopeId || "default");
 }
 function product(panel, id) { return panel.products.find(p => p.id === id); }
 function normalizeProductInput({ name, price, description, stock, imageUrl }) {
@@ -780,6 +935,129 @@ function productSelect(panel, customId = `buy:${panel.id}`) {
   return new ActionRowBuilder().addComponents(menu);
 }
 function saleMessage(panel) { return { embeds: [panelEmbed(panel)], components: [productSelect(panel)] }; }
+function quickOrderConfig(panel) {
+  return { ...defaultQuickOrder(), ...(panel.quickOrder || {}) };
+}
+function quickOrderEmbed(panel) {
+  const quick = quickOrderConfig(panel);
+  const embed = new EmbedBuilder()
+    .setTitle(quick.title || "Compre aqui")
+    .setDescription(String(quick.description || defaultQuickOrder().description).slice(0, 4096))
+    .setColor(parseColor(panel.color));
+
+  if (panel.imageUrl && validUrl(panel.imageUrl)) embed.setImage(panel.imageUrl);
+  if (panel.thumbnailUrl && validUrl(panel.thumbnailUrl)) embed.setThumbnail(panel.thumbnailUrl);
+  return embed;
+}
+function quickOrderRows(panel) {
+  const quick = quickOrderConfig(panel);
+  return [
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`quickbuy:${panel.id}`)
+        .setLabel(String(quick.buttonLabel || "Comprar").slice(0, 80))
+        .setEmoji("🛍️")
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`quickauto:${panel.id}`)
+        .setLabel("Automático")
+        .setEmoji("🎁")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true),
+      new ButtonBuilder()
+        .setCustomId(`quickcombo:${panel.id}`)
+        .setLabel("Combos")
+        .setEmoji("🎁")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true),
+      new ButtonBuilder()
+        .setCustomId(`quickhelp:${panel.id}`)
+        .setLabel("?")
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(true)
+    )
+  ];
+}
+function quickOrderMessage(panel) {
+  return { embeds: [quickOrderEmbed(panel)], components: quickOrderRows(panel) };
+}
+function quickOrderEditModal(sessionId, panel) {
+  const quick = quickOrderConfig(panel);
+  return new ModalBuilder()
+    .setCustomId(`modal:${sessionId}:quickedit`)
+    .setTitle("Editar mensagem comprar")
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("quickTitle")
+          .setLabel("Título da mensagem")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(100)
+          .setRequired(true)
+          .setValue(String(quick.title || "Compre aqui").slice(0, 100))
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("quickDescription")
+          .setLabel("Texto da mensagem")
+          .setStyle(TextInputStyle.Paragraph)
+          .setMaxLength(2000)
+          .setRequired(true)
+          .setValue(String(quick.description || defaultQuickOrder().description).slice(0, 2000))
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("buttonLabel")
+          .setLabel("Texto do botão comprar")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(80)
+          .setRequired(true)
+          .setValue(String(quick.buttonLabel || "Comprar").slice(0, 80))
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("question1")
+          .setLabel("Pergunta 1 do formulário")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(45)
+          .setRequired(true)
+          .setValue(String(quick.question1 || "Nick no roblox").slice(0, 45))
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("question2")
+          .setLabel("Pergunta 2 do formulário")
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(45)
+          .setRequired(true)
+          .setValue(String(quick.question2 || "Nome do Set que você deseja comprar").slice(0, 45))
+      )
+    );
+}
+function quickOrderBuyModal(panel) {
+  const quick = quickOrderConfig(panel);
+  return new ModalBuilder()
+    .setCustomId(`quickmodal:${panel.id}`)
+    .setTitle(String(quick.title || "Comprar").slice(0, 45))
+    .addComponents(
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("answer1")
+          .setLabel(String(quick.question1 || "Nick no roblox").slice(0, 45))
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(100)
+          .setRequired(true)
+      ),
+      new ActionRowBuilder().addComponents(
+        new TextInputBuilder()
+          .setCustomId("answer2")
+          .setLabel(String(quick.question2 || "Nome do Set que você deseja comprar").slice(0, 45))
+          .setStyle(TextInputStyle.Short)
+          .setMaxLength(100)
+          .setRequired(true)
+      )
+    );
+}
 function productInfoEmbed(item, panel, title = "Produto selecionado") {
   const details = item.productId ? orderItemDetails(item, panel) : item;
   const embed = new EmbedBuilder()
@@ -811,6 +1089,9 @@ function configEmbed(panel, ownerId) {
   const publishedLine = panel.publishedChannelId && panel.publishedMessageId
     ? `<#${panel.publishedChannelId}> / mensagem \`${panel.publishedMessageId}\``
     : "Nenhum painel publicado salvo ainda.";
+  const scopeLine = /^\d{15,25}$/.test(String(panel.scopeId || ""))
+    ? `<#${panel.scopeId}>`
+    : "canal atual";
 
   return new EmbedBuilder()
     .setTitle("⚙️ Configurador da Loja")
@@ -818,6 +1099,7 @@ function configEmbed(panel, ownerId) {
     .setDescription(`Use os botões abaixo para montar o painel igual ao da print.
 
 **Dono:** <@${ownerId}>
+**Config deste canal:** ${scopeLine}
 **Canal de publicação:** ${panel.channelId ? `<#${panel.channelId}>` : "não definido; se publicar agora, usa este canal"}
 **Painel publicado salvo:** ${publishedLine}
 **Cor:** \`${panel.color}\`
@@ -829,6 +1111,7 @@ ${lines}
 **Publicar painel** publica ou reutiliza a mensagem salva quando possível.
 **Atualizar publicado** edita manualmente o painel que já está no chat.
 Use **Editar produto** para trocar nome, preço, estoque, foto e brindes.
+Use **Presets** para substituir os produtos só deste canal.
 Use os botões de **Enviar imagem** para mandar arquivo direto no Discord, sem colar link.`);
 }
 function configRows(sessionId) {
@@ -855,7 +1138,10 @@ function configRows(sessionId) {
     ),
     new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`cfg:${sessionId}:uploadpanel`).setLabel("Enviar imagem do painel").setEmoji("🖼️").setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`cfg:${sessionId}:uploadproduct`).setLabel("Enviar foto de produto").setEmoji("📸").setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId(`cfg:${sessionId}:uploadproduct`).setLabel("Enviar foto de produto").setEmoji("📸").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`cfg:${sessionId}:preset`).setLabel("Presets").setEmoji("📋").setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`cfg:${sessionId}:quickedit`).setLabel("Editar compra").setEmoji("🧾").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`cfg:${sessionId}:quickpublish`).setLabel("Publicar compra").setEmoji("🛍️").setStyle(ButtonStyle.Success)
     )
   ];
 }
@@ -866,7 +1152,7 @@ async function refreshConfig(sessionId) {
     const guild = await client.guilds.fetch(s.guildId);
     const ch = await guild.channels.fetch(s.channelId);
     const msg = await ch.messages.fetch(s.messageId);
-    const panel = getPanel(s.guildId);
+    const panel = getPanel(s.guildId, s.scopeId);
     await msg.edit({ embeds: [configEmbed(panel, s.ownerId)], components: configRows(sessionId) });
   } catch (e) { console.error("refreshConfig:", e.message); }
 }
@@ -874,7 +1160,7 @@ async function startConfig(channel, member, user) {
   if (!isAdmin(member)) return channel.send(`<@${user.id}> você precisa ser admin ou ter o cargo ADM configurado.`);
 
   const guildId = channel.guild.id;
-  const panel = getPanel(guildId);
+  const panel = getPanel(guildId, channel.id);
   const sessionId = sid();
   let msg = null;
 
@@ -889,10 +1175,10 @@ async function startConfig(channel, member, user) {
     msg = await channel.send({ embeds: [configEmbed(panel, user.id)], components: configRows(sessionId) });
     panel.configMessageChannelId = channel.id;
     panel.configMessageId = msg.id;
-    savePanel(guildId, panel);
+    savePanel(guildId, panel, channel.id);
   }
 
-  sessions.set(sessionId, { guildId, channelId: channel.id, messageId: msg.id, ownerId: user.id, createdAt: Date.now() });
+  sessions.set(sessionId, { guildId, scopeId: channel.id, channelId: channel.id, messageId: msg.id, ownerId: user.id, createdAt: Date.now() });
   setTimeout(() => sessions.delete(sessionId), 60 * 60 * 1000);
 }
 async function sessionOrReply(interaction, sessionId) {
@@ -1027,7 +1313,7 @@ async function publishPanelMessage(interaction, panel, guildId) {
   const sent = await ch.send(saleMessage(panel));
   panel.publishedChannelId = ch.id;
   panel.publishedMessageId = sent.id;
-  savePanel(guildId, panel);
+  savePanel(guildId, panel, panel.scopeId);
   return { ok: true, action: "published", channelId: ch.id, messageId: sent.id };
 }
 async function updatePublishedPanel(guild, panel) {
@@ -1041,6 +1327,21 @@ async function updatePublishedPanel(guild, panel) {
     return true;
   } catch (error) {
     console.log("Não consegui atualizar painel publicado:", error.message);
+    return false;
+  }
+}
+async function updatePublishedQuickOrder(guild, panel) {
+  const quick = quickOrderConfig(panel);
+  if (!quick.publishedChannelId || !quick.publishedMessageId) return false;
+
+  try {
+    const ch = await guild.channels.fetch(quick.publishedChannelId);
+    if (!ch || !ch.isTextBased()) return false;
+    const msg = await ch.messages.fetch(quick.publishedMessageId);
+    await msg.edit(quickOrderMessage(panel));
+    return true;
+  } catch (error) {
+    console.log("Não consegui atualizar mensagem de compra publicada:", error.message);
     return false;
   }
 }
@@ -1070,6 +1371,47 @@ function productImageUploadMenu(sessionId, panel) {
         value: p.id
       })))
   );
+}
+function presetMenu(sessionId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`preset:${sessionId}`)
+      .setPlaceholder("Escolha um preset para substituir os produtos")
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(Object.entries(PRODUCT_PRESETS).map(([value, preset]) => ({
+        label: preset.label,
+        description: `${preset.items.length} produtos cadastrados automaticamente`,
+        value
+      })))
+  );
+}
+async function publishQuickOrderMessage(interaction, panel, guildId) {
+  const quick = quickOrderConfig(panel);
+  const channelId = panel.channelId || quick.publishedChannelId || interaction.channelId;
+  const ch = await interaction.guild.channels.fetch(channelId).catch(() => null);
+  if (!ch || !ch.isTextBased()) {
+    return { ok: false, message: "Canal inválido. Clique em **Canal** e cole o ID correto." };
+  }
+
+  let oldMessage = null;
+  if (quick.publishedChannelId === ch.id && quick.publishedMessageId) {
+    oldMessage = await ch.messages.fetch(quick.publishedMessageId).catch(() => null);
+  }
+
+  if (oldMessage) {
+    await oldMessage.edit(quickOrderMessage(panel));
+    return { ok: true, action: "updated", channelId: ch.id, messageId: oldMessage.id };
+  }
+
+  const sent = await ch.send(quickOrderMessage(panel));
+  panel.quickOrder = {
+    ...quick,
+    publishedChannelId: ch.id,
+    publishedMessageId: sent.id
+  };
+  savePanel(guildId, panel, panel.scopeId);
+  return { ok: true, action: "published", channelId: ch.id, messageId: sent.id };
 }
 async function saveAttachmentAsDiscordImage(channel, attachment, label) {
   if (attachment.size > MAX_SAVED_IMAGE_BYTES) {
@@ -1121,7 +1463,8 @@ async function queueImageUpload(interaction, sessionId, pending) {
     if (imageUploads.get(key)?.expiresAt === uploadState.expiresAt) imageUploads.delete(key);
   }, IMAGE_UPLOAD_TTL_MS + 1000);
 
-  const panel = getPanel(interaction.guildId);
+  const s = sessions.get(sessionId);
+  const panel = getPanel(interaction.guildId, s?.scopeId || interaction.channelId);
   const label = imageUploadTargetLabel(pending, panel);
   return interaction.reply({
     content: `Beleza. Agora envie a imagem como **anexo neste canal** em até 3 minutos. Vou salvar como ${label}.`,
@@ -1132,9 +1475,22 @@ async function handleConfigButton(interaction) {
   const [, sessionId, action] = interaction.customId.split(":");
   const s = await sessionOrReply(interaction, sessionId);
   if (!s) return;
-  const panel = getPanel(s.guildId);
+  const panel = getPanel(s.guildId, s.scopeId);
   if (["title", "desc", "image", "color", "channel", "add", "mystery"].includes(action)) return interaction.showModal(editModal(sessionId, action, panel));
   if (action === "preview") return interaction.reply({ content: "Preview:", ...saleMessage(panel), ephemeral: true });
+  if (action === "preset") {
+    return interaction.reply({ content: "Escolha o preset. Isso substitui os produtos atuais deste canal.", components: [presetMenu(sessionId)], ephemeral: true });
+  }
+  if (action === "quickedit") {
+    return interaction.showModal(quickOrderEditModal(sessionId, panel));
+  }
+  if (action === "quickpublish") {
+    const result = await publishQuickOrderMessage(interaction, panel, s.guildId);
+    if (!result.ok) return interaction.reply({ content: result.message, ephemeral: true });
+    await refreshConfig(sessionId);
+    const actionText = result.action === "updated" ? "Mensagem de compra atualizada" : "Mensagem de compra publicada";
+    return interaction.reply({ content: `${actionText} em <#${result.channelId}>.`, ephemeral: true });
+  }
   if (action === "uploadpanel") {
     return interaction.reply({ content: "Escolha onde a imagem do painel vai entrar:", components: [panelImageUploadMenu(sessionId)], ephemeral: true });
   }
@@ -1184,7 +1540,10 @@ async function handleConfigButton(interaction) {
     return interaction.reply({ content: "Escolha o produto:", components: [new ActionRowBuilder().addComponents(menu)], ephemeral: true });
   }
   if (action === "reset") {
-    savePanel(s.guildId, defaultPanel(s.guildId));
+    const resetPanel = defaultPanel(s.guildId, s.scopeId);
+    resetPanel.configMessageChannelId = s.channelId;
+    resetPanel.configMessageId = s.messageId;
+    savePanel(s.guildId, resetPanel, s.scopeId);
     await refreshConfig(sessionId);
     return interaction.reply({ content: "Resetado para o exemplo da Dragon Store.", ephemeral: true });
   }
@@ -1197,7 +1556,7 @@ async function handleModal(interaction) {
   const [, sessionId, field, productId] = interaction.customId.split(":");
   const s = await sessionOrReply(interaction, sessionId);
   if (!s) return;
-  const panel = getPanel(s.guildId);
+  const panel = getPanel(s.guildId, s.scopeId);
   if (field === "title") panel.title = interaction.fields.getTextInputValue("title").trim();
   if (field === "desc") panel.description = interaction.fields.getTextInputValue("desc").trim();
   if (field === "image") {
@@ -1211,6 +1570,17 @@ async function handleModal(interaction) {
     const channel = interaction.fields.getTextInputValue("channel").trim();
     if (channel && !/^\d{15,25}$/.test(channel)) return interaction.reply({ content: "ID de canal inválido.", ephemeral: true });
     panel.channelId = channel;
+  }
+  if (field === "quickedit") {
+    const oldQuick = quickOrderConfig(panel);
+    panel.quickOrder = {
+      ...oldQuick,
+      title: interaction.fields.getTextInputValue("quickTitle").trim() || "Compre aqui",
+      description: interaction.fields.getTextInputValue("quickDescription").trim() || defaultQuickOrder().description,
+      buttonLabel: interaction.fields.getTextInputValue("buttonLabel").trim() || "Comprar",
+      question1: interaction.fields.getTextInputValue("question1").trim() || "Nick no roblox",
+      question2: interaction.fields.getTextInputValue("question2").trim() || "Nome do Set que você deseja comprar"
+    };
   }
   if (field === "add") {
     if (panel.products.length >= 25) return interaction.reply({ content: "Limite de 25 produtos atingido.", ephemeral: true });
@@ -1264,7 +1634,7 @@ async function handleModal(interaction) {
       target.imageUrl = imageUrl;
     }
   }
-  savePanel(s.guildId, panel);
+  savePanel(s.guildId, panel, s.scopeId);
   await refreshConfig(sessionId);
   return interaction.reply({ content: "Atualizado.", ephemeral: true });
 }
@@ -1272,9 +1642,9 @@ async function handleRemove(interaction) {
   const [, sessionId] = interaction.customId.split(":");
   const s = await sessionOrReply(interaction, sessionId);
   if (!s) return;
-  const panel = getPanel(s.guildId);
+  const panel = getPanel(s.guildId, s.scopeId);
   panel.products = panel.products.filter(p => p.id !== interaction.values[0]);
-  savePanel(s.guildId, panel);
+  savePanel(s.guildId, panel, s.scopeId);
   await refreshConfig(sessionId);
   return interaction.update({ content: "Produto removido.", components: [] });
 }
@@ -1283,7 +1653,7 @@ async function handleEditProduct(interaction) {
   const s = await sessionOrReply(interaction, sessionId);
   if (!s) return;
 
-  const panel = getPanel(s.guildId);
+  const panel = getPanel(s.guildId, s.scopeId);
   const p = product(panel, interaction.values[0]);
   if (!p) return interaction.reply({ content: "Produto não encontrado. Reabra o configurador e tente de novo.", ephemeral: true });
 
@@ -1301,11 +1671,30 @@ async function handleProductImageUploadTarget(interaction) {
   const s = await sessionOrReply(interaction, sessionId);
   if (!s) return;
 
-  const panel = getPanel(s.guildId);
+  const panel = getPanel(s.guildId, s.scopeId);
   const p = product(panel, interaction.values[0]);
   if (!p) return interaction.reply({ content: "Produto não encontrado. Reabra o configurador e tente de novo.", ephemeral: true });
 
   return queueImageUpload(interaction, sessionId, { target: "product", productId: p.id });
+}
+async function handlePresetSelect(interaction) {
+  const [, sessionId] = interaction.customId.split(":");
+  const s = await sessionOrReply(interaction, sessionId);
+  if (!s) return;
+
+  const panel = getPanel(s.guildId, s.scopeId);
+  const presetKey = interaction.values[0];
+  const ok = applyProductPreset(panel, presetKey);
+  if (!ok) return interaction.reply({ content: "Preset não encontrado.", ephemeral: true });
+
+  savePanel(s.guildId, panel, s.scopeId);
+  await refreshConfig(sessionId);
+
+  const preset = PRODUCT_PRESETS[presetKey];
+  return interaction.update({
+    content: `Preset **${preset.label}** aplicado neste canal com **${preset.items.length}** produtos.`,
+    components: []
+  });
 }
 
 async function privateChannel(guild, user, name, parent) {
@@ -1366,10 +1755,14 @@ function cartButtons(orderId) {
     new ButtonBuilder().setCustomId(`finish:${orderId}`).setLabel("Finalizar compra").setEmoji("✅").setStyle(ButtonStyle.Success)
   );
 }
-function buildStoreStatusEmbed(guildId) {
-  const panel = getPanel(guildId);
+function buildStoreStatusEmbed(guildId, scopeId = "default") {
+  const panel = getPanel(guildId, scopeId);
   const db = readOrders();
-  const orders = Object.values(db.orders || {}).filter(order => !order.guildId || order.guildId === guildId);
+  const orders = Object.values(db.orders || {}).filter(order => {
+    const sameGuild = !order.guildId || order.guildId === guildId;
+    const samePanel = order.panelScopeId ? order.panelScopeId === scopeId : scopeId === "default";
+    return sameGuild && samePanel;
+  });
   const openOrders = orders.filter(order => order.status === "open");
   const closedOrders = orders.filter(order => order.status === "closed");
   const revenue = closedOrders.reduce((summary, order) => {
@@ -1405,8 +1798,8 @@ function buildStoreStatusEmbed(guildId) {
 }
 async function openCart(interaction) {
   const [, panelId] = interaction.customId.split(":");
-  const panel = getPanel(interaction.guildId);
-  if (panel.id !== panelId) return interaction.reply({ content: "Painel antigo. Peça para um admin publicar de novo.", ephemeral: true });
+  const panel = getPanelById(interaction.guildId, panelId);
+  if (!panel) return interaction.reply({ content: "Painel antigo. Peça para um admin publicar de novo.", ephemeral: true });
   const p = product(panel, interaction.values[0]);
   if (!p) return interaction.reply({ content: "Produto não encontrado.", ephemeral: true });
   const id = orderId("order");
@@ -1414,6 +1807,8 @@ async function openCart(interaction) {
   const order = {
     id,
     guildId: interaction.guildId,
+    panelId: panel.id,
+    panelScopeId: panel.scopeId || "default",
     status: "open",
     userId: interaction.user.id,
     username: interaction.user.username,
@@ -1456,12 +1851,110 @@ async function openCart(interaction) {
 
   return interaction.reply({ content: `Carrinho criado: ${ch}`, ephemeral: true });
 }
+async function handleQuickBuyButton(interaction, panelId) {
+  const panel = getPanelById(interaction.guildId, panelId);
+  if (!panel) return interaction.reply({ content: "Mensagem de compra antiga. Peça para um admin publicar de novo.", ephemeral: true });
+  return interaction.showModal(quickOrderBuyModal(panel));
+}
+function quickOrderAnswersEmbed(order, panel) {
+  const quick = order.quickOrder || quickOrderConfig(panel);
+  const answers = order.customAnswers || {};
+  return new EmbedBuilder()
+    .setTitle(`🛍️ Pedido personalizado #${order.id}`)
+    .setDescription("Pedido criado pelo botão **Comprar**.")
+    .setColor(parseColor(panel.color))
+    .addFields(
+      { name: quick.question1 || "Nick no roblox", value: String(answers.answer1 || "Não informado").slice(0, 1024), inline: false },
+      { name: quick.question2 || "Nome do Set que você deseja comprar", value: String(answers.answer2 || "Não informado").slice(0, 1024), inline: false }
+    )
+    .setTimestamp();
+}
+async function handleQuickOrderSubmit(interaction) {
+  const [, panelId] = interaction.customId.split(":");
+  const panel = getPanelById(interaction.guildId, panelId);
+  if (!panel) return interaction.reply({ content: "Mensagem de compra antiga. Peça para um admin publicar de novo.", ephemeral: true });
+
+  const quick = quickOrderConfig(panel);
+  const answer1 = interaction.fields.getTextInputValue("answer1").trim();
+  const answer2 = interaction.fields.getTextInputValue("answer2").trim();
+  const id = orderId("order");
+  const ch = await privateChannel(interaction.guild, interaction.user, `carrinho-${safeName(interaction.user.username)}-aberto-${id}`, config.categories.cartOpen);
+  const order = {
+    id,
+    guildId: interaction.guildId,
+    panelId: panel.id,
+    panelScopeId: panel.scopeId || "default",
+    status: "open",
+    userId: interaction.user.id,
+    username: interaction.user.username,
+    channelId: ch.id,
+    items: [{
+      productId: `custom_${id}`,
+      quantity: 1,
+      name: answer2 || "Pedido personalizado",
+      price: "A combinar",
+      description: `${quick.question1}: ${answer1}\n${quick.question2}: ${answer2}`,
+      stock: "sob demanda",
+      type: "custom_order",
+      imageUrl: panel.imageUrl || ""
+    }],
+    customAnswers: { answer1, answer2 },
+    quickOrder: {
+      title: quick.title,
+      question1: quick.question1,
+      question2: quick.question2
+    },
+    assignedAdminId: null,
+    assignedAdminName: null,
+    assignedAt: null,
+    createdAt: new Date().toISOString(),
+    closedAt: null
+  };
+
+  const db = readOrders();
+  db.orders[id] = order;
+  writeOrders(db);
+
+  const intro = new EmbedBuilder()
+    .setTitle(`🛒 Carrinho aberto #${id}`)
+    .setDescription(config.messages.cartWelcome)
+    .setColor(parseColor(panel.color))
+    .addFields(
+      { name: "Cliente", value: `<@${interaction.user.id}>`, inline: true },
+      { name: "ID da compra", value: id, inline: true }
+    );
+
+  await ch.send({
+    content: `<@${interaction.user.id}>`,
+    embeds: [intro, quickOrderAnswersEmbed(order, panel), cartEmbed(order, panel)],
+    components: [productSelect(panel, `cartadd:${id}`), cartButtons(id)]
+  });
+  await sendStaffChoiceMessage(ch, order, interaction.guildId);
+
+  await sendSafeDM(interaction.user.id, {
+    embeds: [
+      new EmbedBuilder()
+        .setTitle("🛒 Carrinho criado")
+        .setDescription(
+          `Seu carrinho foi criado com sucesso!\n\n` +
+          `**${quick.question1}:** ${answer1}\n` +
+          `**${quick.question2}:** ${answer2}\n` +
+          `**ID da compra:** \`${id}\`\n\n` +
+          `Acesse o canal do carrinho no servidor para continuar: ${ch}`
+        )
+        .setColor(parseColor(panel.color))
+        .setTimestamp()
+    ]
+  });
+
+  return interaction.reply({ content: `Carrinho criado: ${ch}`, ephemeral: true });
+}
 async function addCart(interaction) {
   const [, id] = interaction.customId.split(":");
   const db = readOrders(); const order = db.orders[id];
   if (!order || order.status !== "open") return interaction.reply({ content: "Carrinho fechado ou inexistente.", ephemeral: true });
   if (interaction.user.id !== order.userId && !isAdmin(interaction.member)) return interaction.reply({ content: "Você não pode alterar esse carrinho.", ephemeral: true });
-  const panel = getPanel(interaction.guildId); const p = product(panel, interaction.values[0]);
+  const panel = getOrderPanel(order, interaction.guildId); const p = product(panel, interaction.values[0]);
   if (!p) return interaction.reply({ content: "Produto não encontrado.", ephemeral: true });
   const item = order.items.find(i => i.productId === p.id);
   if (item) item.quantity += 1; else order.items.push(orderItemFromProduct(p));
@@ -1480,13 +1973,13 @@ async function viewCart(interaction, id) {
   const db = readOrders(); const order = db.orders[id];
   if (!order) return interaction.reply({ content: "Carrinho não encontrado.", ephemeral: true });
   if (interaction.user.id !== order.userId && !isAdmin(interaction.member)) return interaction.reply({ content: "Sem permissão.", ephemeral: true });
-  return interaction.reply({ embeds: [cartEmbed(order, getPanel(interaction.guildId))], ephemeral: true });
+  return interaction.reply({ embeds: [cartEmbed(order, getOrderPanel(order, interaction.guildId))], ephemeral: true });
 }
 async function finishCart(interaction, id) {
   const db = readOrders(); const order = db.orders[id];
   if (!order || order.status !== "open") return interaction.reply({ content: "Carrinho fechado ou inexistente.", ephemeral: true });
   if (config.settings.finalizeCartOnlyAdmins && !isAdmin(interaction.member)) return interaction.reply({ content: "Só admin finaliza. Clique em **Chamar ADM**.", ephemeral: true });
-  const panel = getPanel(interaction.guildId);
+  const panel = getOrderPanel(order, interaction.guildId);
   const mysteryResults = Array.isArray(order.mysteryResults) && order.mysteryResults.length
     ? order.mysteryResults
     : rollMysteryBoxes(order, panel);
@@ -1583,7 +2076,7 @@ async function handlePendingImageUpload(message) {
     return true;
   }
 
-  const panel = getPanel(s.guildId);
+  const panel = getPanel(s.guildId, s.scopeId);
   const label = imageUploadTargetLabel(pending, panel);
   const savedImage = await saveAttachmentAsDiscordImage(message.channel, attachment, label);
 
@@ -1601,16 +2094,22 @@ async function handlePendingImageUpload(message) {
     p.imageUrl = savedImage.url;
   }
 
-  savePanel(s.guildId, panel);
+  savePanel(s.guildId, panel, s.scopeId);
   imageUploads.delete(key);
   await refreshConfig(pending.sessionId);
 
   const publishedUpdated = ["panelImage", "panelThumb"].includes(pending.target)
     ? await updatePublishedPanel(message.guild, panel)
     : false;
-  const publishedText = publishedUpdated ? "\nPainel publicado atualizado também." : "";
+  const quickUpdated = ["panelImage", "panelThumb"].includes(pending.target)
+    ? await updatePublishedQuickOrder(message.guild, panel)
+    : false;
+  const publishedText = [
+    publishedUpdated ? "Painel publicado atualizado também." : "",
+    quickUpdated ? "Mensagem de compra publicada atualizada também." : ""
+  ].filter(Boolean).join("\n");
 
-  await message.reply(`Imagem salva como **${label}**.\n${savedImage.note}${publishedText}`).catch(() => null);
+  await message.reply(`Imagem salva como **${label}**.\n${savedImage.note}${publishedText ? `\n${publishedText}` : ""}`).catch(() => null);
   return true;
 }
 
@@ -1638,7 +2137,7 @@ client.on("messageCreate", async message => {
   if (content === `${config.prefix || "!"}status-loja`) {
     if (!isAdmin(message.member)) return message.reply("Só ADM pode ver o status da loja.");
     await message.delete().catch(() => null);
-    const sent = await sendSafeDM(message.author.id, { embeds: [buildStoreStatusEmbed(message.guild.id)] });
+    const sent = await sendSafeDM(message.author.id, { embeds: [buildStoreStatusEmbed(message.guild.id, message.channel.id)] });
     return message.channel.send(sent
       ? `<@${message.author.id}> enviei o status da loja no seu privado.`
       : `<@${message.author.id}> não consegui mandar DM. Use \`/status-loja\` para ver em modo privado.`);
@@ -1661,12 +2160,16 @@ client.on("interactionCreate", async interaction => {
       }
       if (interaction.commandName === "status-loja") {
         if (!await requireAdminInteraction(interaction, "Você precisa ser ADM para ver o status da loja.")) return;
-        return interaction.reply({ embeds: [buildStoreStatusEmbed(interaction.guildId)], ephemeral: true });
+        return interaction.reply({ embeds: [buildStoreStatusEmbed(interaction.guildId, interaction.channelId)], ephemeral: true });
       }
     }
     if (interaction.isButton()) {
       if (interaction.customId.startsWith("cfg:")) return handleConfigButton(interaction);
       if (interaction.customId.startsWith("staff:")) return handleStaffButton(interaction);
+      if (interaction.customId.startsWith("quickbuy:")) {
+        const [, panelId] = interaction.customId.split(":");
+        return handleQuickBuyButton(interaction, panelId);
+      }
       if (interaction.customId === "openticket") return openTicket(interaction);
       const [act, id] = interaction.customId.split(":");
       if (act === "call") return callAdmin(interaction, id, "order");
@@ -1678,8 +2181,10 @@ client.on("interactionCreate", async interaction => {
       if (act === "tclose") return closeTicket(interaction, id);
     }
     if (interaction.isModalSubmit() && interaction.customId === "pixmodal") return handlePixModal(interaction);
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("quickmodal:")) return handleQuickOrderSubmit(interaction);
     if (interaction.isModalSubmit() && interaction.customId.startsWith("modal:")) return handleModal(interaction);
     if (interaction.isStringSelectMenu()) {
+      if (interaction.customId.startsWith("preset:")) return handlePresetSelect(interaction);
       if (interaction.customId.startsWith("remove:")) return handleRemove(interaction);
       if (interaction.customId.startsWith("edit:")) return handleEditProduct(interaction);
       if (interaction.customId.startsWith("uploadpanel:")) return handlePanelImageUploadTarget(interaction);

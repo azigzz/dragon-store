@@ -931,7 +931,7 @@ function productOptionDescription(p) {
 }
 function productSelect(panel, customId = `buy:${panel.id}`) {
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(customId)
+    .setCustomId(`${customId}:${sid()}`)
     .setPlaceholder("📦 Selecione um produto")
     .setMinValues(1).setMaxValues(1);
   if (!panel.products.length) {
@@ -946,6 +946,13 @@ function productSelect(panel, customId = `buy:${panel.id}`) {
   return new ActionRowBuilder().addComponents(menu);
 }
 function saleMessage(panel) { return { embeds: [panelEmbed(panel)], components: [productSelect(panel)] }; }
+async function resetSelectMessage(interaction, payload) {
+  try {
+    await interaction.message?.edit(payload);
+  } catch (error) {
+    console.log("Não consegui resetar o menu de seleção:", error.message);
+  }
+}
 function quickOrderConfig(panel) {
   return { ...defaultQuickOrder(), ...(panel.quickOrder || {}) };
 }
@@ -1813,6 +1820,7 @@ async function openCart(interaction) {
   if (!panel) return interaction.reply({ content: "Painel antigo. Peça para um admin publicar de novo.", ephemeral: true });
   const p = product(panel, interaction.values[0]);
   if (!p) return interaction.reply({ content: "Produto não encontrado.", ephemeral: true });
+  await resetSelectMessage(interaction, saleMessage(panel));
   const id = orderId("order");
   const ch = await privateChannel(interaction.guild, interaction.user, `carrinho-${safeName(interaction.user.username)}-aberto-${id}`, config.categories.cartOpen);
   const order = {
@@ -1967,6 +1975,7 @@ async function addCart(interaction) {
   if (interaction.user.id !== order.userId && !isAdmin(interaction.member)) return interaction.reply({ content: "Você não pode alterar esse carrinho.", ephemeral: true });
   const panel = getOrderPanel(order, interaction.guildId); const p = product(panel, interaction.values[0]);
   if (!p) return interaction.reply({ content: "Produto não encontrado.", ephemeral: true });
+  await resetSelectMessage(interaction, { components: [productSelect(panel, `cartadd:${id}`), cartButtons(id)] });
   const item = order.items.find(i => i.productId === p.id);
   if (item) item.quantity += 1; else order.items.push(orderItemFromProduct(p));
   db.orders[id] = order; writeOrders(db);

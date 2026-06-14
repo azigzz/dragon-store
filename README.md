@@ -80,6 +80,8 @@ npm start
 
 Depois de mudar slash commands em `deploy-commands.js`, rode `npm run deploy` ou redeploy no Render. As melhorias atuais usam comandos ja existentes, mas ainda e recomendado redeployar para subir o codigo novo.
 
+Se `/configpix` nao aparecer ou disser que falta permissao, rode `npm run deploy` de novo. Os comandos slash ficam visiveis no Discord, mas o bot so deixa usar quem tem Administrator ou o cargo ADM configurado em `config.json`.
+
 ## Fluxo do dono da loja
 
 1. Use `/configds` ou `!configds`.

@@ -159,6 +159,11 @@ function money(value) {
 function isAdmin(member) {
   return Boolean(member?.permissions?.has(PermissionFlagsBits.Administrator) || member?.roles?.cache?.has(config.adminRoleId));
 }
+async function requireAdminInteraction(interaction, text = "Você precisa ser ADM para usar esse comando.") {
+  if (isAdmin(interaction.member)) return true;
+  await interaction.reply({ content: text, ephemeral: true });
+  return false;
+}
 
 async function sendSafeDM(userId, payload) {
   try {
@@ -1366,6 +1371,7 @@ ${cartText(order, panel)}`.slice(0, 4096))
 
 function ticketPanelEmbed() { return new EmbedBuilder().setTitle(config.ticketPanel.title).setDescription(config.ticketPanel.description).setColor(parseColor(config.ticketPanel.embedColor, 0x2b2d31)); }
 async function setupTicket(interaction) {
+  if (!await requireAdminInteraction(interaction, "Você precisa ser ADM para enviar o painel de ticket.")) return;
   const ch = await interaction.guild.channels.fetch(config.ticketPanel.channelId).catch(() => null);
   if (!ch || !ch.isTextBased()) return interaction.reply({ content: "Canal de ticket inválido no config.json.", ephemeral: true });
   const btn = new ButtonBuilder().setCustomId("openticket").setLabel(config.ticketPanel.buttonLabel).setEmoji(config.ticketPanel.buttonEmoji).setStyle(ButtonStyle.Primary);
@@ -1425,13 +1431,18 @@ client.on("interactionCreate", async interaction => {
   try {
     if (interaction.isChatInputCommand()) {
       if (interaction.commandName === "configds") {
+        if (!await requireAdminInteraction(interaction, "Você precisa ser ADM para abrir o configurador da loja.")) return;
         await interaction.reply({ content: "Abri o configurador neste canal.", ephemeral: true });
         return startConfig(interaction.channel, interaction.member, interaction.user);
       }
       if (interaction.commandName === "setup-ticket") return setupTicket(interaction);
       if (interaction.commandName === "setup-atendimento") return setupStaffPanel(interaction);
-      if (interaction.commandName === "configpix") return interaction.showModal(pixConfigModal(interaction.guildId, interaction.user));
+      if (interaction.commandName === "configpix") {
+        if (!await requireAdminInteraction(interaction, "Você precisa ser ADM para configurar Pix.")) return;
+        return interaction.showModal(pixConfigModal(interaction.guildId, interaction.user));
+      }
       if (interaction.commandName === "status-loja") {
+        if (!await requireAdminInteraction(interaction, "Você precisa ser ADM para ver o status da loja.")) return;
         return interaction.reply({ embeds: [buildStoreStatusEmbed(interaction.guildId)], ephemeral: true });
       }
     }

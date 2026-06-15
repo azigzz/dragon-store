@@ -22,10 +22,7 @@ const {
 const config = require("../config.json");
 
 const PORT = process.env.PORT || 3000;
-http.createServer((req, res) => {
-  res.writeHead(200, { "Content-Type": "text/plain" });
-  res.end("Bot online");
-}).listen(PORT, () => console.log(`Health server rodando na porta ${PORT}`));
+http.createServer(handleHttpRequest).listen(PORT, () => console.log(`Health server rodando na porta ${PORT}`));
 
 const DATA_DIR = path.join(__dirname, "..", "data");
 const PANELS_FILE = path.join(DATA_DIR, "panels.json");
@@ -750,6 +747,88 @@ function getPanelById(guildId, panelId) {
 
   if (!found && guildStore.panel?.id === panelId) return guildStore.panel;
   return found || null;
+}
+function pickPublicPanel(guildStore) {
+  const panels = Object.values(guildStore?.panels || {});
+  const preferredScope = process.env.PUBLIC_STORE_PANEL_SCOPE?.trim();
+  if (preferredScope && guildStore?.panels?.[preferredScope]) return guildStore.panels[preferredScope];
+  if (guildStore?.panel) panels.push(guildStore.panel);
+
+  return panels.find(panel => panel?.publishedMessageId && (panel.products || []).length) ||
+    panels.find(panel => (panel.products || []).length) ||
+    panels[0] ||
+    defaultPanel(process.env.GUILD_ID || "public-store");
+}
+function publicStoreProduct(p, panel) {
+  return {
+    id: String(p.id || `p${random7()}`),
+    name: String(p.name || "Produto"),
+    price: String(p.price || "A combinar"),
+    description: String(p.description || "Produto digital da Dragon Store"),
+    stock: String(p.stock || "infinito"),
+    imageUrl: p.imageUrl || panel.imageUrl || "",
+    type: p.type || "normal"
+  };
+}
+function publicStorePayload() {
+  const store = readPanels();
+  const configuredGuildId = process.env.PUBLIC_STORE_GUILD_ID?.trim() || process.env.GUILD_ID?.trim();
+  const guildId = configuredGuildId || Object.keys(store.guilds || {})[0] || "public-store";
+  const guildStore = store.guilds?.[guildId] || Object.values(store.guilds || {})[0] || { panels: {} };
+  const panel = pickPublicPanel(guildStore);
+  const products = (panel.products || []).slice(0, 25).map(p => publicStoreProduct(p, panel));
+
+  return {
+    storeName: process.env.PUBLIC_STORE_NAME?.trim() || "Dragon Store",
+    title: panel.title || "Dragon Store",
+    description: panel.description || "Produtos digitais com compra rapida pelo Discord.",
+    imageUrl: panel.imageUrl || "",
+    thumbnailUrl: panel.thumbnailUrl || "",
+    color: normColor(panel.color || "#9b00ff"),
+    discordInviteUrl: process.env.DISCORD_INVITE_URL?.trim() || "",
+    ticketChannelId: config.ticketPanel?.channelId || "",
+    products,
+    updatedAt: panel.updatedAt || new Date().toISOString()
+  };
+}
+function sendHttpJson(res, statusCode, payload) {
+  res.writeHead(statusCode, {
+    "Content-Type": "application/json; charset=utf-8",
+    "Cache-Control": "no-store",
+    "Access-Control-Allow-Origin": process.env.PUBLIC_STORE_CORS_ORIGIN || "*",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
+    "Access-Control-Allow-Methods": "GET, OPTIONS"
+  });
+  res.end(JSON.stringify(payload));
+}
+function handleHttpRequest(req, res) {
+  const url = new URL(req.url || "/", `http://${req.headers.host || "localhost"}`);
+
+  if (req.method === "OPTIONS") {
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": process.env.PUBLIC_STORE_CORS_ORIGIN || "*",
+      "Access-Control-Allow-Headers": "Authorization, Content-Type",
+      "Access-Control-Allow-Methods": "GET, OPTIONS"
+    });
+    return res.end();
+  }
+
+  if (req.method === "GET" && url.pathname === "/api/public-store") {
+    const expectedToken = process.env.PUBLIC_STORE_API_TOKEN?.trim();
+    const auth = String(req.headers.authorization || "");
+
+    if (!expectedToken) {
+      return sendHttpJson(res, 503, { error: "PUBLIC_STORE_API_TOKEN nao configurado no bot." });
+    }
+    if (auth !== `Bearer ${expectedToken}`) {
+      return sendHttpJson(res, 401, { error: "Nao autorizado." });
+    }
+
+    return sendHttpJson(res, 200, publicStorePayload());
+  }
+
+  res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+  res.end("Bot online");
 }
 function getOrderPanel(order, guildId) {
   return (order?.panelId && getPanelById(guildId, order.panelId)) ||

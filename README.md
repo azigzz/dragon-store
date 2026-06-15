@@ -39,6 +39,8 @@ Crie as variaveis no Render ou no `.env` local:
 DISCORD_TOKEN=token_do_bot
 CLIENT_ID=id_da_aplicacao
 GUILD_ID=id_do_servidor
+PUBLIC_STORE_API_TOKEN=gere_um_token_grande_e_dificil
+DISCORD_INVITE_URL=https://discord.gg/seu-convite
 ```
 
 Nunca coloque token real no codigo.
@@ -87,6 +89,27 @@ npm start
 Depois de mudar slash commands em `deploy-commands.js`, rode `npm run deploy` ou redeploy no Render. As melhorias atuais usam comandos ja existentes, mas ainda e recomendado redeployar para subir o codigo novo.
 
 Se `/configpix` nao aparecer ou disser que falta permissao, use `!configpix`: o bot manda um botao que abre o mesmo formulario. Rode `npm run deploy` de novo quando quiser corrigir os slash commands. Os comandos slash ficam visiveis no Discord, mas o bot so deixa usar quem tem Administrator ou o cargo ADM configurado em `config.json`.
+
+## Site da Dragon Store
+
+O projeto do site fica em `site/`. Ele e separado do bot para publicar facil na Vercel.
+
+O bot agora tambem expoe:
+
+```txt
+GET /api/public-store
+Authorization: Bearer PUBLIC_STORE_API_TOKEN
+```
+
+Esse endpoint retorna apenas dados publicos da loja: titulo, descricao, cor, imagens, link do Discord e produtos. Ele nao retorna pedidos, Pix, tokens ou dados internos.
+
+Para testar:
+
+```bash
+curl -H "Authorization: Bearer SEU_TOKEN" https://seu-bot.onrender.com/api/public-store
+```
+
+No site, configure `BOT_PUBLIC_STORE_API_URL` e `BOT_PUBLIC_STORE_API_TOKEN` na Vercel. Mais detalhes estao em `site/README.md`.
 
 ## Fluxo do dono da loja
 

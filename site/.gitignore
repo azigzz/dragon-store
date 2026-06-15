@@ -1,0 +1,9 @@
+node_modules/
+.next/
+out/
+.env
+.env.local
+.env*.local
+data/site-config.runtime.json
+dev-server.log
+tsconfig.tsbuildinfo

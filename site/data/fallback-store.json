@@ -1,0 +1,39 @@
+{
+  "storeName": "Dragon Store",
+  "title": "Produtos digitais com compra rapida pelo Discord",
+  "description": "Escolha seus produtos, monte seu carrinho e finalize a compra abrindo um ticket no nosso servidor.",
+  "imageUrl": "/dragon-store-hero.png",
+  "thumbnailUrl": "",
+  "color": "#28f6a1",
+  "discordInviteUrl": "https://discord.gg/seu-convite",
+  "ticketChannelId": "",
+  "products": [
+    {
+      "id": "fallback-tft",
+      "name": "Set TFT personalizado",
+      "price": "R$ 9,90",
+      "description": "Produto digital entregue pelo atendimento da Dragon Store.",
+      "stock": "sob consulta",
+      "imageUrl": "/dragon-store-hero.png",
+      "type": "normal"
+    },
+    {
+      "id": "fallback-steam",
+      "name": "Steam Key aleatoria",
+      "price": "R$ 3,99",
+      "description": "Key digital com entrega manual pelo Discord.",
+      "stock": "sob consulta",
+      "imageUrl": "/dragon-store-hero.png",
+      "type": "normal"
+    },
+    {
+      "id": "fallback-smm",
+      "name": "Pacote SMM inicial",
+      "price": "R$ 4,90",
+      "description": "Servico digital combinado com a equipe no ticket.",
+      "stock": "sob demanda",
+      "imageUrl": "/dragon-store-hero.png",
+      "type": "normal"
+    }
+  ]
+}

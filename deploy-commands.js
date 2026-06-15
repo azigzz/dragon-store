@@ -32,7 +32,10 @@ const rest = new REST({ version: "10" }).setToken(token);
 
 (async () => {
   try {
-    console.log("Registrando comandos...");
+    console.log("Limpando comandos globais antigos...");
+    await rest.put(Routes.applicationCommands(clientId), { body: [] });
+
+    console.log("Registrando comandos no servidor...");
     await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body: commands });
     console.log("Comandos registrados.");
   } catch (err) {
